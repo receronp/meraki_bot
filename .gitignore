@@ -1,0 +1,8 @@
+# .gitignore
+
+# Ignores file with saved credentials
+credentials.ini
+
+# Ignore the following file extensions
+*.pyc
+*.zip
