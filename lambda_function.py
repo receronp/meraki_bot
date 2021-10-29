@@ -24,19 +24,22 @@ def gather_credentials():
         else:
             cameras = []
         chatbot_token = cp.get('chatbot', 'token')
-        user_email = cp.get('chatbot', 'email')
-        lab_key = cp.get('provisioning', 'key')
-        lab_org = cp.get('provisioning', 'org')
+        emails = cp.get('chatbot', 'email')
+        if ',' in emails:
+            emails = emails.split(',')
+            user_emails = [mail.strip() for mail in emails]
+        else:
+            user_emails = [emails]
     except:
         print('Missing credentials or input file!')
         sys.exit(2)
-    return org_key, cam_key, org_id, cameras, chatbot_token, user_email, lab_key, lab_org
+    return org_key, cam_key, org_id, cameras, chatbot_token, user_emails
 
 
 # Main Lambda function
 def lambda_handler(event, context):
     # Import user credentials
-    (org_key, cam_key, org_id, cameras, chatbot_token, user_email, lab_key, lab_org) = gather_credentials()
+    (org_key, cam_key, org_id, cameras, chatbot_token, user_emails) = gather_credentials()
     headers = {
         'content-type': 'application/json; charset=utf-8',
         'authorization': f'Bearer {chatbot_token}'
@@ -55,14 +58,19 @@ def lambda_handler(event, context):
     user_id = webhook_event['actorId']
     sender_emails = get_emails(session, user_id, headers)
     payload = {'roomId': webhook_event['data']['roomId']}
+
+    # Verifies that message was sent by an authorized user.
+    for email in user_emails:
+        if email in sender_emails:
+            auth_email = True
     
     # Process standard messages
     # Stop if last message was bot's own, or else loop to infinite & beyond!
     if user_id == chatbot_id:
         return {'statusCode': 204}
 
-    # Prevent other users from using personal bot
-    elif user_email not in sender_emails:
+    # Prevent unauthorized users from using bot
+    elif not auth_email:
         post_message(session, headers, payload,
                     f'Hi **{get_name(session, user_id, headers)}**, I\'m not allowed to chat with you! ⛔️')
         return {'statusCode': 200}
@@ -88,9 +96,14 @@ def lambda_handler(event, context):
         # Post camera snapshots
         elif message_contains(message, ['cam', 'photo', 'screen', 'snap', 'shot']):
             try:
-                # Yes, not PEP 8, but for the sake of modular components & CYOA...
-                import snapshot
-                snapshot.return_snapshots(session, headers, payload, cam_key, org_id, message, cameras)
+                args = str(message).split(' ')
+
+                if (webhook_event["data"]["roomType"] == "group" and len(args) > 2) or (webhook_event["data"]["roomType"] == "direct" and len(args) > 1):
+                    # Yes, not PEP 8, but for the sake of modular components & CYOA...
+                    import snapshot
+                    snapshot.return_snapshots(session, headers, payload, cam_key, org_id, message, cameras)
+                else:
+                    post_message(session, headers, payload, 'You need to specify one of the following cameras: ' + ", ".join(cameras) + ", all, net")
 
             except ModuleNotFoundError:
                 post_message(session, headers, payload, 'You need to include the **snapshot** module first! 🤦')

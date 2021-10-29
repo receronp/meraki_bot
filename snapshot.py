@@ -165,7 +165,7 @@ def return_snapshots(session, headers, payload, api_key, org_id, message, labels
             snapshots = meraki_snapshots(session, api_key, None, online_cams)
 
         # Or just specified/filtered ones, skipping those that do not match filtered names/tags
-        else:
+        elif message_contains(message, ['net']):
             post_message(session, headers, payload,
                         '📷 _Retrieving camera snapshots..._')
             filtered_cams = []
@@ -175,6 +175,16 @@ def return_snapshots(session, headers, payload, api_key, org_id, message, labels
                 elif 'tags' in c and set(labels).intersection(c['tags'].split()):
                     filtered_cams.append(c)
             snapshots = meraki_snapshots(session, api_key, None, filtered_cams)
+        else:
+            post_message(session, headers, payload,
+                        '📷 _Retrieving camera snapshot..._')
+            cam = []
+            for c in cameras:
+                if 'name' in c and c['name'] in labels:
+                    if message_contains(message, [c['name'].lower()]):
+                        cam.append(c)
+                        break
+            snapshots = meraki_snapshots(session, api_key, None, cam)
 
         # Send cameras names with files (URLs)
         for (cam_name, file_name, snapshot, video) in snapshots:
