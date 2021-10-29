@@ -6,6 +6,8 @@ import requests
 
 from chatbot import *
 
+from os import makedirs
+import settings
 
 # Store credentials in a separate file
 def gather_credentials():
@@ -38,6 +40,16 @@ def gather_credentials():
 
 # Main Lambda function
 def lambda_handler(event, context):
+    settings.init()
+    my_orgs = settings.dashboard.organizations.getOrganizations()
+    org_id = my_orgs[0]["id"]
+
+    my_networks = settings.dashboard.organizations.getOrganizationNetworks(org_id)
+    for network in my_networks:
+        if network["name"] == "Corpo-Texas52":
+            corpo_network = network
+            break
+    
     # Import user credentials
     (org_key, cam_key, org_id, cameras, chatbot_token, user_emails) = gather_credentials()
     headers = {
@@ -104,6 +116,22 @@ def lambda_handler(event, context):
                     snapshot.return_snapshots(session, headers, payload, cam_key, org_id, message, cameras)
                 else:
                     post_message(session, headers, payload, 'You need to specify one of the following cameras: ' + ", ".join(cameras) + ", all, net")
+
+            except ModuleNotFoundError:
+                post_message(session, headers, payload, 'You need to include the **snapshot** module first! 🤦')
+
+        elif message_contains():
+            try:
+                args = str(message).split(' ')
+
+                # Yes, not PEP 8, but for the sake of modular components & CYOA...
+                import cam_analytics
+                my_cams = cam_analytics.get_camera(settings.dashboard, corpo_network["id"], "people")
+                cam = my_cams["people"][0]
+                if message_contains(message, ["live"]):
+                    post_message(session, headers, payload, f'There are currently **{cam_analytics.get_people_live_count(cam)}** detected by _{cam["name"]}_.')
+                else:
+                    post_message(session, headers, payload, f'There are currently **{cam_analytics.get_people_timespan_count(cam)}** detected by _{cam["name"]}_ in the last hour.')
 
             except ModuleNotFoundError:
                 post_message(session, headers, payload, 'You need to include the **snapshot** module first! 🤦')
